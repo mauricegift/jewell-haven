@@ -63,17 +63,21 @@ Table of contents
 ## Quick .env example
 Create `backend/.env` (DO NOT commit this file):
 ```env
-NODE_ENV=production
-PORT=4000
-DATABASE_URL=postgresql://dbuser:StrongPassword@localhost:5432/jewell_db
-JWT_SECRET=super-secret-key
+PORT=3432
+PGPORT=
+PGUSER=n
+SMS_SENDER_ID=
+PGDATABASE=
+NODE_ENV=
+PGPASSWORD=
+SMS_API_URL=
+JWT_SECRET=
 MPESA_API_URL=https://mpesapi.giftedtech.co.ke
-MPESA_API_KEY=your_mpesa_key_here
-MAILER_API_URL=https://jewell-mailer.giftedtech.co.ke
-MAILER_API_KEY=your_mailer_key_here
-SMS_API_URL=https://sms.ots.co.ke
-SMS_API_KEY=your_sms_key_here
-FRONTEND_DIST_PATH=../frontend/dist
+EMAIL_API_URL=
+SMS_API_TOKEN=
+PGHOST=
+SESSION_SECRET=
+DATABASE_URL=
 ```
 
 ## Server setup (Ubuntu 24.04)
