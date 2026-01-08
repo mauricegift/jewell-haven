@@ -1,71 +1,71 @@
 # Jewell Haven — Full Deployment & Server Docs
 
-This README documents everything you need to set up, build, run, and access the Jewell Haven app (React + Vite frontend, Express backend) on a Contabo Ubuntu 24.04 LTS server. It covers server preparation, database (Postgres) setup, building with Bun, running with PM2, configuration (env variables), and common troubleshooting.
+This README documents how to set up, build, run, and access the Jewell Haven app (React + Vite frontend and Express TypeScript backend) on a Contabo Ubuntu 24.04 LTS server. The repo uses a single root `package.json` and a shared `.env`. It uses Bun for installs/build and PM2 to run the built Node output. Database push uses drizzle-kit.
 
 Table of contents
 - [Project overview](#project-overview)
-- [Assumptions](#assumptions)
+- [Superadmin notice (IMPORTANT)](#superadmin-notice-important)
+- [Assumptions & repo layout](#assumptions--repo-layout)
 - [Requirements](#requirements)
-- [Quick .env example](#quick-env-example)
-- [Server setup (Ubuntu 24.04)](#server-setup-ubuntu-2404)
-  - [System updates and user](#system-updates-and-user)
-  - [Install runtimes (Node, Bun, PM2)](#install-runtimes-node-bun-pm2)
-  - [Firewall (UFW) and ports](#firewall-ufw-and-ports)
-  - [Optional: Nginx reverse proxy & SSL](#optional-nginx-reverse-proxy--ssl)
+- [Quick .env (your sample)](#quick-env-your-sample)
+- [Important code notes (scan results)](#important-code-notes-scan-results)
+- [Server setup (Ubuntu 24.04)](#server-setup-ubuntu-24-04)
+  - [System updates & user](#system-updates--user)
+  - [Install Node, Bun, PM2](#install-node-bun-pm2)
+  - [Firewall (UFW)](#firewall-ufw)
 - [Database (Postgres) setup](#database-postgres-setup)
-  - [Install Postgres](#install-postgres)
-  - [Create DB and user](#create-db-and-user)
-  - [Allow remote connections (optional)](#allow-remote-connections-optional)
-  - [Prisma & migrations](#prisma--migrations)
-- [Build steps (frontend & backend)](#build-steps-frontend--backend)
-- [Serve the frontend with the backend (recommended)](#serve-the-frontend-with-the-backend-recommended)
-- [Running the app with PM2](#running-the-app-with-pm2)
-  - [PM2 ecosystem example](#pm2-ecosystem-example)
-  - [Run Bun directly with PM2 (alternative)](#run-bun-directly-with-pm2-alternative)
-- [Option B — Serve frontend with Nginx (reverse proxy)](#option-b--serve-frontend-with-nginx-reverse-proxy)
+  - [drizzle-kit note (db:push)](#drizzle-kit-note-dbpush)
+- [Build steps (shared package.json & Bun)](#build-steps-shared-packagejson--bun)
+- [Serve frontend with backend (production)](#serve-frontend-with-backend-production)
+- [Run with PM2 (production)](#run-with-pm2-production)
+  - [ecosystem.config.js example](#ecosystemconfigjs-example)
+- [Nginx reverse-proxy (optional)](#nginx-reverse-proxy-optional)
 - [Accessing the app](#accessing-the-app)
-- [Log management & monitoring](#log-management--monitoring)
+- [Logs & monitoring](#logs--monitoring)
 - [Backups & maintenance](#backups--maintenance)
-- [Environment variables reference](#environment-variables-reference)
+- [Environment variables reference (your sample)](#environment-variables-reference-your-sample)
+- [Security & CORS notes](#security--cors-notes)
 - [Troubleshooting](#troubleshooting)
 - [Appendix: useful commands](#appendix-useful-commands)
-- [Security recommendations](#security-recommendations)
 
 ---
 
 ## Project overview
-- Frontend: React + Vite (built into static assets)
+- Frontend: React + Vite
 - Backend: Express (TypeScript)
-- Package manager & build runtime: Bun
-- Process manager: PM2
-- Database: PostgreSQL
+- Single repository with a shared root `package.json` and shared `.env`.
+- Build/runtime tools: Bun (install/build) and PM2 (process manager).
+- DB: PostgreSQL (drizzle-kit schema push used)
 - Integrations:
-  - Payment: mpesapi.giftedtech.co.ke
-  - Email: jewell-mailer.giftedtech.co.ke
+  - MPESA: https://mpesapi.giftedtech.co.ke
+  - Email: jewell-mailer.giftedtech.co.ke (configure EMAIL_API_URL)
   - SMS: sms.ots.co.ke
 
-## Assumptions
-- You have a Contabo server running Ubuntu 24.04 LTS (8GB RAM, 150GB SSD).
-- You have SSH access to that server (root or a sudo user).
-- The repo contains `frontend/` (Vite) and `backend/` (Express) folders; adjust paths if different.
-- Your backend has a build script (e.g. `bun run build`) that outputs JS to `dist/` (adjust if different).
-- You use Prisma (the README references `bun run db:push`), but adapt if you use another ORM.
+## Superadmin notice (IMPORTANT)
+**First registered user becomes superadmin:** The application automatically assigns the first account that registers the "superadmin" role with full control (user & site management). Ensure the first account is created by a trusted operator. If you want different behavior, update registration logic before deploying.
+
+## Assumptions & repo layout
+- Single root `package.json` controls both frontend & backend scripts.
+- Backend source entry: `server/index.ts` (dev) → built file `dist/index.cjs` (start).
+- You keep environment variables in the repo root `.env` (shared).
+- The repository contains frontend sources (Vite) and `server/` for the backend.
 
 ## Requirements
-- Ubuntu 24.04 LTS
+- Ubuntu 24.04 LTS (your Contabo VM)
 - Git
 - Bun
-- Node.js (for PM2)
+- Node.js (for PM2 and Node runtime)
 - PM2
-- PostgreSQL (local or remote)
-- Optional: Nginx and certbot for SSL
+- PostgreSQL
+- Optional: Nginx + certbot for TLS
 
-## Quick .env example
-Create `backend/.env` (DO NOT commit this file):
+## Quick .env (your sample)
+Create a root `.env` (DO NOT commit secrets). Use this exact set you provided:
+
 ```env
 PORT=3432
 PGPORT=
-PGUSER=n
+PGUSER=
 SMS_SENDER_ID=
 PGDATABASE=
 NODE_ENV=
@@ -80,72 +80,72 @@ SESSION_SECRET=
 DATABASE_URL=
 ```
 
-## Server setup (Ubuntu 24.04)
-Follow these steps on your Contabo VM.
+Notes:
+- If you set `DATABASE_URL` you do not need the individual PG vars; drizzle-kit and most DB libs prefer `DATABASE_URL`.
+- `PORT` is the port server listens on (server/index.ts defaults to PORT or 5000). Set to `3432` per your sample.
 
-### System updates and user
-1. SSH to server:
+## Important code notes (scan results)
+I inspected:
+- Root package.json scripts: `dev` (`tsx server/index.ts`), `build` (`tsx script/build.ts`), `start` (`node dist/index.cjs`), `check` (`tsc`), `db:push` (`drizzle-kit push`). See file: https://github.com/mussacco/jewell-haven/blob/b4e5b71c08423998f53f390016c7b2ca1fefa2ff/package.json
+- Backend dev entry: `server/index.ts` (strict CORS domain, production serves static assets via `serveStatic`, listens on env PORT): https://github.com/mussacco/jewell-haven/blob/b4e5b71c08423998f53f390016c7b2ca1fefa2ff/server/index.ts
+
+Keep in mind the scan may be incomplete. To inspect other repo files, visit: https://github.com/mussacco/jewell-haven
+
+## Server setup (Ubuntu 24.04)
+SSH and initial packages:
 ```bash
 ssh youruser@SERVER_IP
-```
-2. Update system and install tools:
-```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y git curl wget build-essential ca-certificates
+sudo apt install -y git curl wget build-essential ca-certificates ufw
 ```
-3. (Recommended) Add a non-root user:
+
+Create a deploy user:
 ```bash
 sudo adduser deployer
 sudo usermod -aG sudo deployer
-# Then ssh deployer@SERVER_IP
+# then ssh deployer@SERVER_IP
 ```
 
-### Install runtimes (Node, Bun, PM2)
-- Install Node.js (example: Node 20):
+### Install Node, Bun, PM2
+Install Node (needed for PM2 and Node runtime):
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 node -v
 ```
-- Install PM2 globally:
+
+Install PM2:
 ```bash
 sudo npm install -g pm2
 pm2 -v
 ```
-- Install Bun:
+
+Install Bun (for installs/builds):
 ```bash
 curl -fsSL https://bun.sh/install | bash
-# Add ~/.bun/bin to PATH, then:
+# then add to PATH per the install output:
+export PATH="$HOME/.bun/bin:$PATH"
 bun -v
 ```
-Notes: We'll use Bun for installs and builds, and run the built Node-compatible JS with PM2.
 
-### Firewall (UFW) and ports
+### Firewall (UFW)
+Allow SSH and the app port:
 ```bash
-sudo apt install -y ufw
 sudo ufw allow OpenSSH
-sudo ufw allow 4000/tcp   # change 4000 to your PORT
-# If using nginx:
-sudo ufw allow 'Nginx Full'
+sudo ufw allow 3432/tcp   # use PORT value from .env
 sudo ufw enable
 sudo ufw status
 ```
 
-### Optional: Nginx reverse proxy & SSL
-If you want port 80/443 with a domain name, install nginx and certbot and create a server block that proxies `/api` to your backend and serves the frontend static files. See the Nginx example below in [Option B — Serve frontend with Nginx (reverse proxy)](#option-b--serve-frontend-with-nginx-reverse-proxy).
-
 ## Database (Postgres) setup
-
-### Install Postgres
-On the server (if running locally):
+Install and start Postgres (if running locally):
 ```bash
 sudo apt install -y postgresql postgresql-contrib
 sudo systemctl enable --now postgresql
 sudo -u postgres psql
 ```
 
-### Create DB and user
-Inside psql:
+Create DB & user:
 ```sql
 CREATE USER jewell_user WITH PASSWORD 'StrongPassword';
 CREATE DATABASE jewell_db OWNER jewell_user;
@@ -153,24 +153,14 @@ GRANT ALL PRIVILEGES ON DATABASE jewell_db TO jewell_user;
 \q
 ```
 
-### Allow remote connections (optional)
-If you need remote DB access, edit `/etc/postgresql/*/main/postgresql.conf` to set `listen_addresses = '*'` and add client CIDR entries to `pg_hba.conf`, then restart:
+### drizzle-kit note (db:push)
+The repo uses `drizzle-kit push` (see package.json). Use your `.env` DATABASE_URL or PG* variables then:
 ```bash
-sudo systemctl restart postgresql
+# run from repo root
+bun run db:push
 ```
 
-### Prisma & migrations
-If you use Prisma:
-1. Ensure `DATABASE_URL` is set in `backend/.env`.
-2. From `backend/`:
-```bash
-bun run db:push       # or `bun run migrate deploy` depending on workflow
-bun run generate      # if you have prisma generate
-```
-
-## Build steps (frontend & backend)
-Assuming repo has `frontend/` and `backend/`:
-
+## Build steps (shared package.json & Bun)
 1. Clone the repo:
 ```bash
 cd /var/www
@@ -178,207 +168,148 @@ git clone https://github.com/mussacco/jewell-haven.git
 cd jewell-haven
 ```
 
-2. Frontend:
+2. Install dependencies with Bun:
 ```bash
-cd frontend
 bun install
-bun run build
-# Result: frontend/dist/ (or Vite configured output)
 ```
+Bun reads root package.json and will install packages used by both frontend and backend.
 
-3. Backend:
+3. Build the project:
 ```bash
-cd ../backend
-bun install
+# This runs your build script: tsx script/build.ts
+bun run build
+```
+- The repo's start script expects a built file at `dist/index.cjs` (see `start` in package.json). Confirm `script/build.ts` outputs `dist/index.cjs`.
+
+4. Database push (drizzle-kit):
+```bash
 bun run db:push
-bun run build
-# Result: backend/dist/ (JS ready for Node)
 ```
 
-## Serve the frontend with the backend (recommended)
-- Option: Have Express serve the built frontend static files.
-- Copy built frontend into backend static folder:
+5. Dev mode:
 ```bash
-rm -rf backend/public/*
-cp -r ../frontend/dist/* backend/public/
-```
-- Example Express snippet:
-```js
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+# run backend in dev (tsx will execute server/index.ts)
+bun run dev
 ```
 
-## Running the app with PM2
-Build to Node-compatible JS and run with PM2 for robustness.
+## Serve frontend with backend (production)
+server/index.ts uses `serveStatic(app)` in production. The static-serving helper should point to your built frontend assets. If your build outputs a `dist/` or other folder, ensure the `serveStatic` helper is configured to serve it. Alternatively, copy frontend build to a `public/` folder consumed by server:
 
-1. Ensure `backend/.env` exists and is configured.
-2. Example PM2 ecosystem file (`backend/ecosystem.config.js`):
+```bash
+# Example (adjust paths if different)
+rm -rf server/public/*
+cp -r path/to/frontend/dist/* server/public/
+# then build backend and start
+bun run build
+```
+
+## Run with PM2 (production)
+Start the built Node file `dist/index.cjs` with PM2 (recommended):
+
+Example direct start:
+```bash
+cd /var/www/jewell-haven
+# ensure .env is present at repo root
+pm2 start dist/index.cjs --name jewell-backend --node-args="--enable-source-maps"
+pm2 save
+pm2 startup systemd -u deployer --hp /home/deployer
+# run the printed command to complete startup setup
+```
+
+### ecosystem.config.js example
+Save this in repo root as `ecosystem.config.js` (adjust paths if necessary):
+
 ```js
 module.exports = {
   apps: [
     {
       name: "jewell-backend",
-      script: "./dist/server.js", // adjust to your built entry file
+      script: "./dist/index.cjs",
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
-        PORT: 4000
+        PORT: 3432
       }
     }
   ]
 };
 ```
-3. Start with PM2:
+
+Start with:
 ```bash
-cd backend
 pm2 start ecosystem.config.js
-# or:
-pm2 start dist/server.js --name jewell-backend
-```
-4. Make PM2 restart apps on reboot:
-```bash
 pm2 save
-pm2 startup systemd -u youruser --hp /home/youruser
-# Follow the printed command to complete setup
 ```
 
-### PM2 ecosystem example
-(See the example above — adjust `script` to your actual built entrypoint.)
-
-### Run Bun directly with PM2 (alternative)
-Less common and sometimes flaky. Example:
-```bash
-pm2 start --name jewell-backend --interpreter bash -- -c "bun run start"
-```
-Prefer building to Node JS and running with Node/PM2.
-
-## Option B — Serve frontend with Nginx (reverse proxy)
-1. Build frontend to `/var/www/jewell-frontend`:
-```bash
-cp -r frontend/dist /var/www/jewell-frontend
-```
-2. Nginx server block (example):
-```
-server {
-    listen 80;
-    server_name _; # replace with domain or use server IP
-    root /var/www/jewell-frontend;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:4000/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-3. Apply & restart nginx:
-```bash
-sudo systemctl restart nginx
-```
-4. Use certbot for HTTPS if you have a domain:
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
-```
+## Nginx reverse-proxy (optional)
+If you want to use port 80/443 with a domain and proxy API to backend:
+- Build frontend to a folder (e.g., `/var/www/jewell-frontend`)
+- Nginx serve static files and proxy `/api/` to `http://127.0.0.1:3432/`
+- Use certbot for HTTPS if you have a domain
 
 ## Accessing the app
-- If backend serves frontend: open http://SERVER_IP:PORT (e.g. http://203.0.113.10:4000)
-- If using Nginx with port 80/443: open http://SERVER_IP/ or https://yourdomain.com
-- Confirm `PORT` in `.env` matches the port allowed in UFW.
+- If backend serves frontend: http://SERVER_IP:3432
+- If using Nginx: http://SERVER_IP/ or https://yourdomain.com
 
-## Log management & monitoring
-- Tail logs:
+## Logs & monitoring
 ```bash
 pm2 logs jewell-backend
-```
-- Check status:
-```bash
 pm2 status
 pm2 monit
 ```
-- Save process list:
-```bash
-pm2 save
-```
 
 ## Backups & maintenance
-- Postgres dump:
+Postgres dump:
 ```bash
 pg_dump -U jewell_user -h localhost -Fc jewell_db > /backups/jewell_db_$(date +%F).dump
 ```
-- Restore:
-```bash
-pg_restore -U jewell_user -d jewell_db /backups/jewell_db_2026-01-01.dump
-```
-- Typical update workflow:
+Restore with `pg_restore`.
+
+Update workflow:
 ```bash
 git pull
 bun install
-# Rebuild frontend & backend
-bun run build # in backend
-(cd frontend && bun run build)
-# Restart
+bun run build
+bun run db:push
 pm2 restart jewell-backend
 ```
 
-## Environment variables reference
-- NODE_ENV — production/development
-- PORT — backend port to listen on
-- DATABASE_URL — PostgreSQL connection string
-- JWT_SECRET — signing key for auth tokens
+## Environment variables reference (your sample)
+- PORT — backend port (3432)
+- PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE — individual Postgres settings
+- DATABASE_URL — complete Postgres connection string (preferred)
+- NODE_ENV — `production`/`development`
+- JWT_SECRET — JWT signing key
+- SESSION_SECRET — session signing key
 - MPESA_API_URL — https://mpesapi.giftedtech.co.ke
-- MPESA_API_KEY — (if required)
-- MAILER_API_URL — https://jewell-mailer.giftedtech.co.ke
-- MAILER_API_KEY — (if required)
-- SMS_API_URL — https://sms.ots.co.ke
-- SMS_API_KEY — (if required)
-- FRONTEND_DIST_PATH — path to built frontend assets
+- EMAIL_API_URL — mailer endpoint
+- SMS_API_URL, SMS_API_TOKEN, SMS_SENDER_ID — SMS provider
+- Other service keys — keep secret
+
+## Security & CORS notes
+- server/index.ts contains strict origin validation. By default it uses:
+  - ALLOWED_DOMAIN / ALLOWED_ORIGIN = `https://jwl.giftedtech.co.ke`
+- In production, the server will block modifying API requests (POST/PUT/PATCH/DELETE) from other origins. Update `server/index.ts` or set `NODE_ENV=development` only for local testing.
+- Ensure the first user you register is trusted (superadmin).
+- Do not commit `.env` to git.
 
 ## Troubleshooting
-- Use `pm2 logs` to inspect runtime errors.
-- Common issues:
-  - Wrong `script` path in PM2 ecosystem file.
-  - Missing env vars (DATABASE_URL, JWT_SECRET).
-  - DB connection errors — check Postgres status and `pg_hba.conf`.
-  - CORS errors if frontend/api origins differ — add CORS middleware in Express.
-- Example to enable CORS:
-```js
-import cors from 'cors';
-app.use(cors({ origin: 'http://yourfrontend.com' })); // or '*'
-```
+- If server refuses requests from your browser, check CORS origin and `ALLOWED_ORIGIN` in `server/index.ts`.
+- If `dist/index.cjs` missing after build, inspect `script/build.ts` to confirm output path.
+- Use `pm2 logs` and `pm2 status` to debug runtime errors.
 
 ## Appendix: useful commands
-- Update server:
-  - sudo apt update && sudo apt upgrade -y
-- Install bun:
-  - curl -fsSL https://bun.sh/install | bash
-- Build frontend:
-  - cd frontend && bun install && bun run build
-- Build backend:
-  - cd backend && bun install && bun run build && bun run db:push
-- Start backend:
-  - cd backend && pm2 start dist/server.js --name jewell-backend
-- PM2 management:
-  - pm2 status
-  - pm2 logs jewell-backend
-  - pm2 restart jewell-backend
-  - pm2 save
-
-## Security recommendations
-- Never commit `.env` or secrets.
-- Use strong DB passwords and restrict remote Postgres access to necessary IPs.
-- Use HTTPS in production (Nginx + certbot).
-- Harden SSH (key-based auth, disable password login) and limit allowed IPs if possible.
+- Install deps: `bun install`
+- Build project: `bun run build`
+- DB push (drizzle-kit): `bun run db:push`
+- Dev server: `bun run dev`
+- Start with PM2: `pm2 start dist/index.cjs --name jewell-backend`
 
 ---
 
-If your repo layout or script names differ (for example different build output paths or entrypoint filename), tell me the actual build output folder for frontend and the backend entrypoint file (e.g. `dist/index.js`), and I will update this README and provide an adjusted `ecosystem.config.js` and nginx server block that exactly match your project.
+If you'd like I can:
+- create a `.env.example` file in the repo with your sample env,
+- add `ecosystem.config.js` into the repo with the correct entrypoint,
+- or update `server/index.ts` docs and ALLOWED_ORIGIN to use an env var instead of the hard-coded domain.
+
+Tell me which you'd like next and I will generate the file contents and a git-ready patch for you.
