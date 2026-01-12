@@ -1,6 +1,6 @@
 # Jewell Haven — Full Deployment & Server Docs
 
-This README documents how to set up, build, run, and access the Jewell Haven app (React + Vite frontend and Express TypeScript backend) on a Contabo Ubuntu 24.04 LTS server. The repo uses a single root `package.json` and a shared `.env`. It uses Bun for installs/build and PM2 to run the built Node output. Database push uses drizzle-kit.
+This README documents how to set up, build, run, and access the Jewell Haven app (React + Vite frontend and Express TypeScript backend) on a Contabo Ubuntu 24.04 LTS server. The repo uses a single [...]
 
 Table of contents
 - [Project overview](#project-overview)
@@ -18,7 +18,7 @@ Table of contents
 - [Build steps (shared package.json & Bun)](#build-steps-shared-packagejson--bun)
 - [Serve frontend with backend (production)](#serve-frontend-with-backend-production)
 - [Run with PM2 (production)](#run-with-pm2-production)
-  - [ecosystem.config.js example](#ecosystemconfigjs-example)
+  - [ecosystem.config.cjs example](#ecosystemconfigcjsexample)
 - [Nginx reverse-proxy (optional)](#nginx-reverse-proxy-optional)
 - [Accessing the app](#accessing-the-app)
 - [Logs & monitoring](#logs--monitoring)
@@ -42,7 +42,7 @@ Table of contents
   - SMS: sms.ots.co.ke
 
 ## Superadmin notice (IMPORTANT)
-**First registered user becomes superadmin:** The application automatically assigns the first account that registers the "superadmin" role with full control (user & site management). Ensure the first account is created by a trusted operator. If you want different behavior, update registration logic before deploying.
+**First registered user becomes superadmin:** The application automatically assigns the first account that registers the "superadmin" role with full control (user & site management). Ensure the fi[...]
 
 ## Assumptions & repo layout
 - Single root `package.json` controls both frontend & backend scripts.
@@ -86,8 +86,8 @@ Notes:
 
 ## Important code notes (scan results)
 I inspected:
-- Root package.json scripts: `dev` (`tsx server/index.ts`), `build` (`tsx script/build.ts`), `start` (`node dist/index.cjs`), `check` (`tsc`), `db:push` (`drizzle-kit push`). See file: https://github.com/mussacco/jewell-haven/blob/b4e5b71c08423998f53f390016c7b2ca1fefa2ff/package.json
-- Backend dev entry: `server/index.ts` (strict CORS domain, production serves static assets via `serveStatic`, listens on env PORT): https://github.com/mussacco/jewell-haven/blob/b4e5b71c08423998f53f390016c7b2ca1fefa2ff/server/index.ts
+- Root package.json scripts: `dev` (`tsx server/index.ts`), `build` (`tsx script/build.ts`), `start` (`node dist/index.cjs`), `check` (`tsc`), `db:push` (`drizzle-kit push`). See file: https://git[...]
+- Backend dev entry: `server/index.ts` (strict CORS domain, production serves static assets via `serveStatic`, listens on env PORT): https://github.com/mussacco/jewell-haven/blob/b4e5b71c08423998f[...]
 
 Keep in mind the scan may be incomplete. To inspect other repo files, visit: https://github.com/mussacco/jewell-haven
 
@@ -193,7 +193,7 @@ bun run dev
 ```
 
 ## Serve frontend with backend (production)
-server/index.ts uses `serveStatic(app)` in production. The static-serving helper should point to your built frontend assets. If your build outputs a `dist/` or other folder, ensure the `serveStatic` helper is configured to serve it. Alternatively, copy frontend build to a `public/` folder consumed by server:
+server/index.ts uses `serveStatic(app)` in production. The static-serving helper should point to your built frontend assets. If your build outputs a `dist/` or other folder, ensure the `serveStat[...]
 
 ```bash
 # Example (adjust paths if different)
@@ -216,8 +216,8 @@ pm2 startup systemd -u deployer --hp /home/deployer
 # run the printed command to complete startup setup
 ```
 
-### ecosystem.config.js example
-Save this in repo root as `ecosystem.config.js` (adjust paths if necessary):
+### ecosystem.config.cjs example
+Save this in repo root as `ecosystem.config.cjs` (adjust paths if necessary):
 
 ```js
 module.exports = {
@@ -237,7 +237,7 @@ module.exports = {
 
 Start with:
 ```bash
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
@@ -261,7 +261,7 @@ pm2 monit
 ## Backups & maintenance
 Postgres dump:
 ```bash
-pg_dump -U jewell_user -h localhost -Fc jewell_db > /backups/jewell_db_$(date +%F).dump
+pg_dump -U jewell_user -h localhost -Fc jewell_db_$(date +%F).dump
 ```
 Restore with `pg_restore`.
 
@@ -309,7 +309,7 @@ pm2 restart jewell-backend
 
 If you'd like I can:
 - create a `.env.example` file in the repo with your sample env,
-- add `ecosystem.config.js` into the repo with the correct entrypoint,
+- add `ecosystem.config.cjs` into the repo with the correct entrypoint,
 - or update `server/index.ts` docs and ALLOWED_ORIGIN to use an env var instead of the hard-coded domain.
 
 Tell me which you'd like next and I will generate the file contents and a git-ready patch for you.
